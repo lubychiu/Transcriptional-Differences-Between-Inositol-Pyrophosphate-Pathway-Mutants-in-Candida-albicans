@@ -34,8 +34,11 @@ $ echo "Quality control complete."
 ```
 
 ### Evaluating FastQC Results
-Download the HTML file to visualize FastQC results.
+Download the HTML file to visualize FastQC results. Run the following command after exiting from the HPC login node back onto your local computer.
 ```bash
-# Download the HTML file from the HPC to your local computer
+# Exit the HPC
+$ exit
+
+# Download the HTML file
 $ gcloud compute scp m12-controller:/home/yc1201/rnaseq_ypd1/results/qc/*.html ~/Downloads/rnaseq_ypd1
 ```
