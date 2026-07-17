@@ -248,83 +248,83 @@ $ gcloud compute scp m12-controller:/home/yc1201/rnaseq_ypd1/results/counts/cand
 ```
 
 ## Differential Expression Analysis
-R studio
+Done in R studio.
 ```bash
 # This installs the manager tool needed for biological packages (only do this once)
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
+$ if (!requireNamespace("BiocManager", quietly = TRUE)) {
+   install.packages("BiocManager")
 }
 
 # This installs DESeq2 and a graphing tool (this might take a few minutes)
-BiocManager::install("DESeq2")
-install.packages("ggplot2")
+$ BiocManager::install("DESeq2")
+$ install.packages("ggplot2")
 
-library(DESeq2)
-library(ggplot2)
+$ library(DESeq2)
+$ library(ggplot2)
 
-# 1. Load the 8-sample count matrix text file
-counts_raw <- read.table("candida_counts_matrix.txt", header = TRUE, comment.char = "#", check.names = FALSE)
+# Load the 8-sample count matrix text file
+$ counts_raw <- read.table("candida_counts_matrix.txt", header = TRUE, comment.char = "#", check.names = FALSE)
 
-# 2. Extract Geneid (column 1) and your 8 raw count columns (columns 7 through 14)
-counts_clean <- counts_raw[, c(1, 7:14)]
+# Extract Geneid (column 1) and your 8 raw count columns (columns 7 through 14)
+$ counts_clean <- counts_raw[, c(1, 7:14)]
 
-# 3. Collapse any duplicate gene names by adding their counts together
-counts_fixed <- aggregate(. ~ Geneid, data = counts_clean, FUN = sum)
-rownames(counts_fixed) <- counts_fixed$Geneid
-counts <- counts_fixed[, -1]
+# Collapse any duplicate gene names by adding their counts together
+$ counts_fixed <- aggregate(. ~ Geneid, data = counts_clean, FUN = sum)
+$ rownames(counts_fixed) <- counts_fixed$Geneid
+$ counts <- counts_fixed[, -1]
 
-# 4. MANUALLY BUILD A PERFECT METADATA TABLE TO BYPASS DISK FILE GLITCHES
+# MANUALLY BUILD A PERFECT METADATA TABLE TO BYPASS DISK FILE GLITCHES
 # This extracts the exact 8 long BAM names straight from your clean counts matrix columns
-bam_names <- colnames(counts)
+$ bam_names <- colnames(counts)
 
 # Define your 4 strains corresponding to samples 1 through 8 in order
 strains_vector <- c("WT", "WT", "kcs1", "kcs1", "vip1", "vip1", "dbl", "dbl")
 
 # Create the clean dataframe
-metadata <- data.frame(
-  Sample_ID = bam_names,
-  Strain = factor(strains_vector),
-  row.names = bam_names
+$ metadata <- data.frame(
+   Sample_ID = bam_names,
+   Strain = factor(strains_vector),
+   row.names = bam_names
 )
 
-# 5. Set 'WT' as your baseline control benchmark
-metadata$Strain <- relevel(metadata$Strain, ref = "WT")
+# Set 'WT' as your baseline control benchmark
+$ metadata$Strain <- relevel(metadata$Strain, ref = "WT")
 
-# 6. Verify the data layout looks spectacular before running the math
-print("--- CLEAN METADATA VERIFICATION ---")
-print(metadata)
+# Verify the data layout looks spectacular before running the math
+$ print("--- CLEAN METADATA VERIFICATION ---")
+$ print(metadata)
 
-# 7. Build the DESeq2 data object
-dds <- DESeqDataSetFromMatrix(countData = counts,
+# Build the DESeq2 data object
+$ dds <- DESeqDataSetFromMatrix(countData = counts,
                               colData = metadata,
                               design = ~ Strain)
 
-# 8. Filter out lowly expressed genes (less than 10 total reads)
-keep <- rowSums(counts(dds)) >= 10
-dds <- dds[keep, ]
+# Filter out lowly expressed genes (less than 10 total reads)
+$ keep <- rowSums(counts(dds)) >= 10
+$ dds <- dds[keep, ]
 
-# 9. Run the core differential expression analysis pipeline (Takes ~30 seconds)
-dds <- DESeq(dds)
+# Run the core differential expression analysis pipeline (Takes ~30 seconds)
+$ dds <- DESeq(dds)
 
-# 10. Print the final available strain comparisons to your screen!
-print("--- AVAILABLE DESEQ2 COMPARISONS ---")
-resultsNames(dds)
+# Print the final available strain comparisons to your screen!
+$ print("--- AVAILABLE DESEQ2 COMPARISONS ---")
+$ resultsNames(dds)
 
 
-# 1. Extract, sort, and save dbl vs WT results
-res_dbl <- results(dds, name = "Strain_dbl_vs_WT")
-res_dbl_sorted <- res_dbl[order(res_dbl$padj), ]
-write.csv(as.data.frame(res_dbl_sorted), file = "Dbl_vs_WT_Differential_Expression.csv")
+# Extract, sort, and save dbl vs WT results
+$ res_dbl <- results(dds, name = "Strain_dbl_vs_WT")
+$ res_dbl_sorted <- res_dbl[order(res_dbl$padj), ]
+$ write.csv(as.data.frame(res_dbl_sorted), file = "Dbl_vs_WT_Differential_Expression.csv")
 
-# 2. Extract, sort, and save kcs1 vs WT results
-res_kcs1 <- results(dds, name = "Strain_kcs1_vs_WT")
-res_kcs1_sorted <- res_kcs1[order(res_kcs1$padj), ]
-write.csv(as.data.frame(res_kcs1_sorted), file = "Kcs1_vs_WT_Differential_Expression.csv")
+# Extract, sort, and save kcs1 vs WT results
+$ res_kcs1 <- results(dds, name = "Strain_kcs1_vs_WT")
+$ res_kcs1_sorted <- res_kcs1[order(res_kcs1$padj), ]
+$ write.csv(as.data.frame(res_kcs1_sorted), file = "Kcs1_vs_WT_Differential_Expression.csv")
 
-# 3. Extract, sort, and save vip1 vs WT results
-res_vip1 <- results(dds, name = "Strain_vip1_vs_WT")
-res_vip1_sorted <- res_vip1[order(res_vip1$padj), ]
-write.csv(as.data.frame(res_vip1_sorted), file = "Vip1_vs_WT_Differential_Expression.csv")
+# Extract, sort, and save vip1 vs WT results
+$ res_vip1 <- results(dds, name = "Strain_vip1_vs_WT")
+$ res_vip1_sorted <- res_vip1[order(res_vip1$padj), ]
+$ write.csv(as.data.frame(res_vip1_sorted), file = "Vip1_vs_WT_Differential_Expression.csv")
 
-print("All 3 results spreadsheets successfully saved to your computer!")
+$ print("All 3 results spreadsheets successfully saved to your computer!")
 ```
