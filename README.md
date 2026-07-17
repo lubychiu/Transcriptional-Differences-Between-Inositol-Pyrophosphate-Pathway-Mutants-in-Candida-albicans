@@ -42,3 +42,11 @@ $ exit
 # Download the HTML file
 $ gcloud compute scp m12-controller:/home/yc1201/rnaseq_ypd1/results/qc/*.html ~/Downloads/rnaseq_ypd1
 ```
+Results of all 8 samples:
+- Phred quality scores: >38 over entire plot
+- Adapter content: flat line at 0% across the entire read length
+- Per sequence GC content: peaks at ~GC signature of Candida albicans
+- Overrepresented sequences: all ~0.1 to 0.2%
+- Per base N content: flat at 0% across the entire read length
+- Sequences flagged as poor quality: 0
+Verdict: can move onto alignment without trimming
