@@ -115,3 +115,79 @@ Check the output file to see if the index was built successfully.
 $ less z01.star_index1_248026.out
 ```
 ### STAR Alignment
+To open window to write slurm script:
+```bash
+$ nano star_alignment
+```
+
+Once window is open, paste in slurm script. Run slurm array job to align all 8 samples simultaneously.
+```bash
+#!/bin/bash
+#SBATCH --job-name=star_alignment
+#SBATCH --output=/home/yc1201/rnaseq_ypd1/slurm/z02.%x_%A_%a.out
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=yc1201@georgetown.edu
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=6
+#SBATCH --time=04:00:00
+#SBATCH --mem=30G
+#SBATCH --array=1-8
+
+# Establish directory paths
+BASE_DIR="/home/yc1201/rnaseq_ypd1"
+RAW_DIR="${BASE_DIR}/rnaseq_ypd1/raw"
+INDEX_DIR="${BASE_DIR}/reference/star_index"
+OUT_DIR="${BASE_DIR}/results/aligned"
+
+mkdir -p ${OUT_DIR}
+
+# 2. Map SLURM Array IDs (1-8) to specific filenames
+if [ ${SLURM_ARRAY_TASK_ID} -eq 1 ]; then
+    SAMPLE="2GK5PB_1_WT1"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 2 ]; then
+    SAMPLE="2GK5PB_2_WT2"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 3 ]; then
+    SAMPLE="2GK5PB_3_kcs1-1"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 4 ]; then
+    SAMPLE="2GK5PB_4_kcs1-2"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 5 ]; then
+    SAMPLE="2GK5PB_5_vip1-1"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 6 ]; then
+    SAMPLE="2GK5PB_6_vip1-2"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 7 ]; then
+    SAMPLE="2GK5PB_7_dbl-1"
+elif [ ${SLURM_ARRAY_TASK_ID} -eq 8 ]; then
+    SAMPLE="2GK5PB_8_dbl-2"
+fi
+
+# Load STAR module
+module load star
+
+# 4. Run STAR alignment for single-end reads
+# --readFilesCommand zcat allows STAR to read compressed .gz files directly
+STAR --runMode alignReads \
+     --runThreadN 6 \
+     --genomeDir ${INDEX_DIR} \
+     --readFilesIn ${RAW_DIR}/${SAMPLE}.fastq.gz \
+     --readFilesCommand zcat \
+     --outFileNamePrefix ${OUT_DIR}/${SAMPLE}_ \
+     --outSAMtype BAM SortedByCoordinate
+
+echo "Alignment for ${SAMPLE} complete."
+```
+
+Click ^x for exit, y to confirm file name, then return. To run the script:
+```bash
+$ sbatch /home/yc1201/rnaseq_ypd1/slurm/star_alignment
+```
+
+To check status of job, use:
+```bash
+$ squeue -u yc1201
+```
+
+Check one of the output files to see if the job ran successfully.
+```bash
+$ less z02.star_alignment
+```
