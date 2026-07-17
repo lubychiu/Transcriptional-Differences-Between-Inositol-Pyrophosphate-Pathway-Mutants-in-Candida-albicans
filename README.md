@@ -2,10 +2,10 @@
 summary...
 
 ## Paths
-Raw Fastq files: /home/yc1201/rnaseq_ypd1/raw
-FastQC results: /home/yc1201/rnaseq_ypd1/results/qc
-Reference genome: /home/yc1201/rnaseq_ypd1/reference
-Slurm scripts: /home/yc1201/rnaseq_ypd1/slurm
+- Raw Fastq files: /home/yc1201/rnaseq_ypd1/raw
+- FastQC results: /home/yc1201/rnaseq_ypd1/results/qc
+- Reference genome: /home/yc1201/rnaseq_ypd1/reference
+- Slurm scripts: /home/yc1201/rnaseq_ypd1/slurm
 
 ## Download RNA-Sequencing Results
 After downloading RNA-sequencing results from Plasmidsaurus, open zip file.
