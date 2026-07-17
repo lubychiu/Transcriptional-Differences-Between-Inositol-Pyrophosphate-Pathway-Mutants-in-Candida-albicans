@@ -241,3 +241,10 @@ Click ^x for exit, y to confirm file name, then return. To run the script:
 ```bash
 $ sbatch /home/yc1201/rnaseq_ypd1/slurm/featurecounts
 ```
+
+Download the count matrix to your local computer. Run from local computer terminal.
+```bash
+$ gcloud compute scp m12-controller:/home/yc1201/rnaseq_ypd1/results/counts/candida_counts_matrix.txt /Users/lubychiu/Downloads/Ca_RNA_Seq/Count_matrix
+```
+
+## Differential Expression Analysis
