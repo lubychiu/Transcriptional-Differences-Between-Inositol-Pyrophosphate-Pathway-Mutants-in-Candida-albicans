@@ -189,5 +189,54 @@ $ squeue -u yc1201
 
 Check one of the output files to see if the job ran successfully.
 ```bash
-$ less z02.star_alignment
+$ less z02.star_alignment_248035_1.out
+```
+
+## Generating Gene Counts
+To open window to write slurm script:
+```bash
+$ nano featurecounts
+```
+
+Once window is open, paste in slurm script.
+```bash
+#!/bin/bash
+#SBATCH --job-name=featurecounts
+#SBATCH --output=/home/yc1201/rnaseq_ypd1/slurm/z03.%x_%j.out
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=yc1201@georgetown.edu
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=01:00:00
+#SBATCH --mem=10G
+
+# Establish directory paths
+BASE_DIR="/home/yc1201/rnaseq_ypd1"
+BAM_DIR="${BASE_DIR}/results/aligned"
+GTF_FILE="${BASE_DIR}/reference/genomic.gtf"
+OUT_DIR="${BASE_DIR}/results/counts"
+
+mkdir -p ${OUT_DIR}
+
+# Load the subread module (which contains featureCounts)
+module load subread
+
+# Run featureCounts on all 8 BAM files simultaneously
+# -T 4: uses 4 processors
+# -t exon: counts reads mapping to exon features
+# -g gene_id: groups exons by their Gene ID attribute to give you gene-level counts
+featureCounts -T 4 \
+              -a ${GTF_FILE} \
+              -t exon \
+              -g gene_id \
+              -o ${OUT_DIR}/candida_counts_matrix.txt \
+              ${BAM_DIR}/*_Aligned.sortedByCoord.out.bam
+
+echo "FeatureCounts execution complete."
+```
+
+Click ^x for exit, y to confirm file name, then return. To run the script:
+```bash
+$ sbatch /home/yc1201/rnaseq_ypd1/slurm/featurecounts
 ```
