@@ -173,6 +173,7 @@ STAR --runMode alignReads \
      --readFilesCommand zcat \
      --outFileNamePrefix ${OUT_DIR}/${SAMPLE}_ \
      --outSAMtype BAM SortedByCoordinate
+     --limitBAMsortRAM 1200000000
 
 echo "Alignment for ${SAMPLE} complete."
 ```
