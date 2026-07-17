@@ -49,4 +49,5 @@ Results of all 8 samples:
 - Overrepresented sequences: all ~0.1 to 0.2%
 - Per base N content: flat at 0% across the entire read length
 - Sequences flagged as poor quality: 0
+
 Verdict: can move onto alignment without trimming
