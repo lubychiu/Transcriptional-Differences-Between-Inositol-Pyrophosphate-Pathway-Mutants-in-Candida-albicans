@@ -8,12 +8,12 @@ Reference genome: /home/yc1201/rnaseq_ypd1/reference
 
 ## Download RNA-Sequencing Results
 After downloading RNA-sequencing results from Plasmidsaurus, open zip file.
-Upload raw fastq files to the HPC from your local computer. Remember to run the following command from your local computer terminal and not the HPC command line.
+Upload raw fastq files to the HPC from your local computer. Run the following command from your local computer terminal and not the HPC command line.
 ```bash
 $ gcloud compute scp /Users/lubychiu/Downloads/2GK5PB_fastq/*.fastq.gz m12-controller:/home/yc1201/rnaseq_ypd1/raw
 ```
 
-## Quality control (FASTQC)
+## Quality Control (FASTQC)
 ```bash
 # Enter interactive mode on a compute node (from where you are)
 $ srun --pty bash
@@ -32,5 +32,10 @@ $ fastqc -o /home/yc1201/rnaseq_ypd1/results/qc/ /home/yc1201/rnaseq_ypd1/raw/*.
 
 $ echo "Quality control complete."
 ```
-```bash
 
+### Evaluating FastQC Results
+Download the HTML file to visualize FastQC results.
+```bash
+# Download the HTML file from the HPC to your local computer
+$ gcloud compute scp m12-controller:/home/yc1201/rnaseq_ypd1/results/qc/*.html ~/Downloads/rnaseq_ypd1
+```
