@@ -135,38 +135,38 @@ Once window is open, paste in slurm script. Run slurm array job to align all 8 s
 #SBATCH --array=1-8
 
 # Establish directory paths
-BASE_DIR="/home/yc1201/rnaseq_ypd1"
-RAW_DIR="${BASE_DIR}/rnaseq_ypd1/raw"
-INDEX_DIR="${BASE_DIR}/reference/star_index"
-OUT_DIR="${BASE_DIR}/results/aligned"
+$ BASE_DIR="/home/yc1201/rnaseq_ypd1"
+$ RAW_DIR="${BASE_DIR}/rnaseq_ypd1/raw"
+$ INDEX_DIR="${BASE_DIR}/reference/star_index"
+$ OUT_DIR="${BASE_DIR}/results/aligned"
 
-mkdir -p ${OUT_DIR}
+$ mkdir -p ${OUT_DIR}
 
 # 2. Map SLURM Array IDs (1-8) to specific filenames
-if [ ${SLURM_ARRAY_TASK_ID} -eq 1 ]; then
+$ if [ ${SLURM_ARRAY_TASK_ID} -eq 1 ]; then
     SAMPLE="2GK5PB_1_WT1"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 2 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 2 ]; then
     SAMPLE="2GK5PB_2_WT2"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 3 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 3 ]; then
     SAMPLE="2GK5PB_3_kcs1-1"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 4 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 4 ]; then
     SAMPLE="2GK5PB_4_kcs1-2"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 5 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 5 ]; then
     SAMPLE="2GK5PB_5_vip1-1"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 6 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 6 ]; then
     SAMPLE="2GK5PB_6_vip1-2"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 7 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 7 ]; then
     SAMPLE="2GK5PB_7_dbl-1"
-elif [ ${SLURM_ARRAY_TASK_ID} -eq 8 ]; then
+$ elif [ ${SLURM_ARRAY_TASK_ID} -eq 8 ]; then
     SAMPLE="2GK5PB_8_dbl-2"
-fi
+$ fi
 
 # Load STAR module
-module load star
+$ module load star
 
 # 4. Run STAR alignment for single-end reads
 # --readFilesCommand zcat allows STAR to read compressed .gz files directly
-STAR --runMode alignReads \
+$ STAR --runMode alignReads \
      --runThreadN 6 \
      --genomeDir ${INDEX_DIR} \
      --readFilesIn ${RAW_DIR}/${SAMPLE}.fastq.gz \
@@ -175,7 +175,7 @@ STAR --runMode alignReads \
      --outSAMtype BAM SortedByCoordinate
      --limitBAMsortRAM 1200000000
 
-echo "Alignment for ${SAMPLE} complete."
+$ echo "Alignment for ${SAMPLE} complete."
 ```
 
 Click ^x for exit, y to confirm file name, then return. To run the script:
@@ -213,28 +213,28 @@ Once window is open, paste in slurm script.
 #SBATCH --mem=10G
 
 # Establish directory paths
-BASE_DIR="/home/yc1201/rnaseq_ypd1"
-BAM_DIR="${BASE_DIR}/results/aligned"
-GTF_FILE="${BASE_DIR}/reference/genomic.gtf"
-OUT_DIR="${BASE_DIR}/results/counts"
+$ BASE_DIR="/home/yc1201/rnaseq_ypd1"
+$ BAM_DIR="${BASE_DIR}/results/aligned"
+$ GTF_FILE="${BASE_DIR}/reference/genomic.gtf"
+$ OUT_DIR="${BASE_DIR}/results/counts"
 
-mkdir -p ${OUT_DIR}
+$ mkdir -p ${OUT_DIR}
 
 # Load the subread module (which contains featureCounts)
-module load subread
+$ module load subread
 
 # Run featureCounts on all 8 BAM files simultaneously
 # -T 4: uses 4 processors
 # -t exon: counts reads mapping to exon features
 # -g gene_id: groups exons by their Gene ID attribute to give you gene-level counts
-featureCounts -T 4 \
+$ featureCounts -T 4 \
               -a ${GTF_FILE} \
               -t exon \
               -g gene_id \
               -o ${OUT_DIR}/candida_counts_matrix.txt \
               ${BAM_DIR}/*_Aligned.sortedByCoord.out.bam
 
-echo "FeatureCounts execution complete."
+$ echo "FeatureCounts execution complete."
 ```
 
 Click ^x for exit, y to confirm file name, then return. To run the script:
