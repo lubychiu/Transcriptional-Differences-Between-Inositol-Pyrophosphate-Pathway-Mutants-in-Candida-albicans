@@ -328,3 +328,129 @@ $ write.csv(as.data.frame(res_vip1_sorted), file = "Vip1_vs_WT_Differential_Expr
 
 $ print("All 3 results spreadsheets successfully saved to your computer!")
 ```
+
+## Visualizations
+Done in RStudio.
+### Heatmap
+Top 50 genes with largest fold changes relative to WT.
+```bash
+# This installs the manager tool needed for biological packages (only do this once)
+$ if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+$ library(DESeq2)
+$ library(EnhancedVolcano)
+$ library(pheatmap)
+$ library(RColorBrewer)
+$ library(ggplot2)
+
+# PARSE DATABASE COORDINATES USING RAW CHROMOSOMAL LOOKUP TAB
+$ print("Loading CGD database file and mapping numeric coordinates...")
+$ cgd_raw <- read.table("cgd_features.tab", header = FALSE, sep = "\t", quote = "", comment.char = "!")
+
+$ mapping_table <- data.frame(
+  systematic_id = trimws(as.character(cgd_raw[, 1])),
+  gene_symbol   = trimws(as.character(cgd_raw[, 2])),
+  stringsAsFactors = FALSE
+)
+$ mapping_table$gene_symbol[mapping_table$gene_symbol == "" | mapping_table$gene_symbol == mapping_table$systematic_id] <- NA
+$ mapping_table$numeric_key <- as.numeric(gsub("[^0-9]", "", mapping_table$systematic_id))
+$ mapping_table <- mapping_table[!is.na(mapping_table$numeric_key), ]
+
+# REFINED INDIVIDUAL VOLCANO PLOTS (BIGGER AXES + CLEANER TEXT)
+$ print("Generating scaled Volcano Plots...")
+$ volcano_targets <- list("Dbl_vs_WT" = res_dbl, "Kcs1_vs_WT" = res_kcs1, "Vip1_vs_WT" = res_vip1)
+
+$ for (comp_name in names(volcano_targets)) {
+   res_df <- as.data.frame(volcano_targets[[comp_name]])
+   res_df$raw_id <- rownames(res_df)
+   res_df$numeric_key <- as.numeric(gsub("[^0-9]", "", res_df$raw_id))
+   res_df <- merge(res_df, mapping_table[, c("numeric_key", "gene_symbol")], by = "numeric_key", all.x = TRUE)
+  
+  # Format names cleanly: shorten non-characterized locus codes
+$  short_code <- gsub("CA$", "", gsub("^CAALFM_", "", res_df$raw_id))
+$  base_label <- ifelse(!is.na(res_df$gene_symbol), res_df$gene_symbol, short_code)
+$  res_df$final_label <- ifelse(!is.na(res_df$padj) & res_df$padj < 0.05, base_label, "")
+  
+  # Export to folder
+$   png(filename = paste0("Volcano_Plot_", comp_name, ".png"), width = 1200, height = 1000, res = 150)
+  
+$   p_vol <- EnhancedVolcano(res_df,
+                           lab = res_df$final_label,
+                           x = 'log2FoldChange', y = 'padj',
+                           pCutoff = 0.05, FCcutoff = 1.0,
+                           pointSize = 1.2, labSize = 3.0, # Shrunk point and label scales to stop overlaps
+                           col = c('grey50', 'forestgreen', 'royalblue3', 'firebrick2'),
+                           title = paste("Comparison:", comp_name),
+                           subtitle = "Labelled keys reflect adjusted p-value < 0.05 only",
+                           legendPosition = 'bottom',
+                           drawConnectors = TRUE, widthConnectors = 0.3,
+                           max.overlaps = 80)              # Loosened overlapping parameters considerably
+  
+  # INJECT RE-FORMATTED ENHANCED AXIS SIZE MODIFICATIONS HERE
+$   p_vol <- p_vol + theme(
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    axis.text.x = element_text(size = 14, color = "black"),
+    axis.text.y = element_text(size = 14, color = "black"),
+    title = element_text(size = 16, face = "bold")
+  )
+  
+  $ print(p_vol)
+  $ dev.off()
+}
+
+# CONSTRUCT A UNIFIED LOG2 FOLD-CHANGE HEATMAP (TOP 50 GENES)
+print("Compiling a single comparative Log2 Fold Change Heatmap...")
+
+# Create a clean master dataframe combining all log2FoldChanges across the 3 tests
+$ fc_matrix_df <- data.frame(
+   Dbl_Log2FC  = res_dbl$log2FoldChange,
+   Kcs1_Log2FC = res_kcs1$log2FoldChange,
+   Vip1_Log2FC = res_vip1$log2FoldChange,
+   Dbl_padj    = res_dbl$padj,
+   Kcs1_padj   = res_kcs1$padj,
+   Vip1_padj   = res_vip1$padj,
+   raw_id      = rownames(res_dbl)
+)
+
+# Extract matching text titles using numeric coordinates
+$ fc_matrix_df$numeric_key <- as.numeric(gsub("[^0-9]", "", fc_matrix_df$raw_id))
+$ fc_master <- merge(fc_matrix_df, mapping_table[, c("numeric_key", "gene_symbol")], by = "numeric_key", all.x = TRUE)
+
+# Clean up locus identifiers
+$ row_shortened <- gsub("CA$", "", gsub("^CAALFM_", "", fc_master$raw_id))
+$ fc_master$display_name <- ifelse(!is.na(fc_master$gene_symbol), fc_master$gene_symbol, row_shortened)
+
+# TARGET THE TOP 50 GENES: Find the 50 genes with the strongest statistical change 
+# across ANY of the three mutant strains (sorting by lowest overall p-value)
+$ fc_master$min_padj <- pmin(fc_master$Dbl_padj, fc_master$Kcs1_padj, fc_master$Vip1_padj, na.rm = TRUE)
+$ fc_master_sorted <- fc_master[!is.na(fc_master$min_padj), ]
+$ top50_genes <- head(fc_master_sorted[order(fc_master_sorted$min_padj), ], 50)
+
+# Build the plotting grid matrix using just the fold changes
+$ heatmap_matrix <- as.matrix(top50_genes[, c("Dbl_Log2FC", "Kcs1_Log2FC", "Vip1_Log2FC")])
+$ rownames(heatmap_matrix) <- top50_genes$display_name
+$ colnames(heatmap_matrix) <- c("Dbl Mutant vs WT", "Kcs1 Mutant vs WT", "Vip1 Mutant vs WT")
+
+# Formulate a symmetric color palette centered strictly on zero (Blue=Down, Red=Up)
+$ max_val <- max(abs(heatmap_matrix), na.rm = TRUE)
+$ color_breaks <- seq(-max_val, max_val, length.out = 101)
+
+# Export the master Heatmap file
+$ png(filename = "Unified_Mutants_vs_WT_Log2FC_Heatmap.png", width = 1100, height = 1200, res = 150)
+
+$ pheatmap(heatmap_matrix, 
+         scale = "none",              # No row scaling needed since data is already in log2FC units
+         cluster_cols = TRUE,         # Clusters mutants together based on behavior similarities
+         cluster_rows = TRUE,         # Hierarchical grouping of gene patterns
+         color = colorRampPalette(c("royalblue3", "white", "firebrick2"))(100), # White means zero change
+         breaks = color_breaks,       # Align color changes cleanly around 0
+         fontsize_row = 9,            # Clear label sizes
+         fontsize_col = 11,           
+         border_color = "grey95",
+         main = "Comparative Fold Changes of Top 50 Genes Relative to WT")
+
+$ dev.off()
+$ print("SUCCESS: Consolidated multi-mutant heatmap and expanded volcano charts exported successfully!")
+```
