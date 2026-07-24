@@ -1,5 +1,5 @@
 # Transcriptional-Differences-Between-Inositol-Pyrophosphate-Pathway-Mutants-in-Candida-albicans
-summary...
+...
 
 ## Paths
 - Raw Fastq files: /home/yc1201/rnaseq_ypd1/raw
