@@ -1,6 +1,4 @@
-# Transcriptional-Differences-Between-Inositol-Pyrophosphate-Pathway-Mutants-in-Candida-albicans
-...
-
+# Transcriptional Differences Between Inositol Pyrophosphate Pathway Mutants in Candida albicans
 ## Paths
 - Raw Fastq files: /home/yc1201/rnaseq_ypd1/raw
 - FastQC results: /home/yc1201/rnaseq_ypd1/results/qc
