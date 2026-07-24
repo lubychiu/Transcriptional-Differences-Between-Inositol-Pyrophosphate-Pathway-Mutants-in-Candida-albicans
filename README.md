@@ -677,12 +677,7 @@ print("SUCCESS: Full pipeline executed. Non-coding RNAs are cleared and verified
 ```
 
 ### GO Term Analysis
-Double mutant example.
 ```bash
-# Install the universal GO.db mapping dictionary if you don't have it
-if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-if (!requireNamespace("GO.db", quietly = TRUE)) BiocManager::install("GO.db")
-
 library(DESeq2)
 library(clusterProfiler)
 library(ggplot2)
@@ -714,112 +709,133 @@ go2gene_clean <- go2gene_all[go2gene_all$GO_ID != "" & go2gene_all$Match_ID != "
 go2gene_clean <- unique(go2gene_clean)
 
 # ============================================================
-# 2. EXTRACT DIRECTIONAL FOREGROUND AND BACKGROUND GENES
+# 2. DEFINE MASTER MUTANT STRAIN TARGETS LIST
 # ============================================================
-print("Extracting target gene profiles from DESeq2 active memory...")
-res_go_df <- as.data.frame(res_dbl) # Swap to res_kcs1 or res_vip1 here as needed
-res_go_df$raw_id <- rownames(res_go_df)
-
-res_go_df$stripped_id <- gsub("^CAALFM_", "", res_go_df$raw_id)
-res_go_df$id_norm <- normalize_id(res_go_df$stripped_id)
-
-universe_genes <- res_go_df$id_norm
-sig_up <- res_go_df$id_norm[!is.na(res_go_df$padj) & res_go_df$padj < 0.05 & res_go_df$log2FoldChange >= 1.0]
-sig_down <- res_go_df$id_norm[!is.na(res_go_df$padj) & res_go_df$padj < 0.05 & res_go_df$log2FoldChange <= -1.0]
-
-go2gene <- go2gene_clean[go2gene_clean$Match_ID %in% universe_genes, ]
-colnames(go2gene) <- c("GO_ID", "Gene_ID")
-
-print(paste("Synchronized Database Map Rows:", nrow(go2gene)))
-print(paste("Clean Input Targets Up:", length(sig_up), "| Down:", length(sig_down)))
+mutant_targets <- list(
+  "Dbl_vs_WT"  = res_dbl,
+  "Kcs1_vs_WT" = res_kcs1,
+  "Vip1_vs_WT" = res_vip1
+)
 
 # ============================================================
-# 3. RUN HYPERGEOMETRIC GO ENRICHMENT LOOP WITH GO.DB NAMES
+# 3. OUTER PIPELINE LOOP: ITERATE THROUGH EACH MUTANT STRAIN
 # ============================================================
-gene_lists <- list("Up_Regulated" = sig_up, "Down_Regulated" = sig_down)
-
-for (direction in names(gene_lists)) {
-  target_genes <- gene_lists[[direction]]
-  print(paste("Analyzing biological enrichment tracking for:", direction))
+for (mutant_name in names(mutant_targets)) {
   
-  if (length(target_genes) < 5) {
-    print(paste("Skipping", direction, "- Insufficient gene volume for calculation."))
-    next
-  }
+  print(paste("============================================================"))
+  print(paste("STARTING GENE ONTOLOGY ANALYSIS FOR:", mutant_name))
+  print(paste("============================================================"))
   
-  go_enrich_results <- enricher(
-    gene          = target_genes,
-    universe      = universe_genes,
-    TERM2GENE     = go2gene,
-    pvalueCutoff  = 1.0, 
-    qvalueCutoff  = 1.0, 
-    pAdjustMethod = "BH"
-  )
+  res_go_df <- as.data.frame(mutant_targets[[mutant_name]])
+  res_go_df$raw_id <- rownames(res_go_df)
   
-  go_df <- as.data.frame(go_enrich_results)
-  if (nrow(go_df) == 0) {
-    print(paste("No background matches established for:", direction))
-    next
-  }
+  # Strip matching prefixes to sync layout matrix rows with database standards
+  res_go_df$stripped_id <- gsub("^CAALFM_", "", res_go_df$raw_id)
+  res_go_df$id_norm <- normalize_id(res_go_df$stripped_id)
   
-  raw_hits <- go_df[go_df$pvalue < 0.05, ]
-  print(paste("Successfully recorded", nrow(raw_hits), "terms matching threshold for", direction))
+  universe_genes <- res_go_df$id_norm
+  sig_up <- res_go_df$id_norm[!is.na(res_go_df$padj) & res_go_df$padj < 0.05 & res_go_df$log2FoldChange >= 1.0]
+  sig_down <- res_go_df$id_norm[!is.na(res_go_df$padj) & res_go_df$padj < 0.05 & res_go_df$log2FoldChange <= -1.0]
   
-  if (nrow(raw_hits) > 0) {
+  # Sub-select references to limit memory footprint and match dimensions cleanly
+  go2gene <- go2gene_clean[go2gene_clean$Match_ID %in% universe_genes, ]
+  colnames(go2gene) <- c("GO_ID", "Gene_ID")
+  
+  print(paste("Synchronized Background Map Rows:", nrow(go2gene)))
+  print(paste("Significant Hits Detected -> Up:", length(sig_up), "| Down:", length(sig_down)))
+  
+  # Split targets into directional vectors
+  gene_lists <- list("Up_Regulated" = sig_up, "Down_Regulated" = sig_down)
+  
+  # ============================================================
+  # 4. INNER LOOP: DIRECTIONAL GO ENRICHMENT & GRAPH EXPORTS
+  # ============================================================
+  for (direction in names(gene_lists)) {
+    target_genes <- gene_lists[[direction]]
+    print(paste("Processing sub-enrichment loop calculations for:", mutant_name, "-", direction))
     
-    # FIX: Query the universal Bioconductor ontology database map directly using the result keys
-    # This translates alphanumeric strings (GO:0009653) into real text pathways (morphogenesis)
-    pathway_terms <- mget(go_df$ID, GOTERM, ifnotfound = NA)
-    pathway_names <- sapply(pathway_terms, function(x) {
-      if (is.na(x)) return(NA)
-      return(Term(x))
-    })
+    if (length(target_genes) < 5) {
+      print(paste("Skipping direction:", direction, "- Insufficient target gene volume."))
+      next
+    }
     
-    # Overlay the newly fetched descriptions onto your table layout
-    go_df$Pathway_Description <- pathway_names
-    go_df$Pathway_Description <- ifelse(!is.na(go_df$Pathway_Description) & go_df$Pathway_Description != "", 
-                                        go_df$Pathway_Description, go_df$ID)
+    # Run custom hypergeometric profile matrices
+    go_enrich_results <- enricher(
+      gene          = target_genes,
+      universe      = universe_genes,
+      TERM2GENE     = go2gene,
+      pvalueCutoff  = 1.0, 
+      qvalueCutoff  = 1.0, 
+      pAdjustMethod = "BH"
+    )
     
-    # Format a publication-ready hybrid tag layout: "Pathway Text Name (GO:XXXXXXX)"
-    go_df$Final_Plot_Label <- paste0(go_df$Pathway_Description, " (", go_df$ID, ")")
+    go_df <- as.data.frame(go_enrich_results)
+    if (nrow(go_df) == 0) {
+      print(paste("No overlap terms resolved for:", mutant_name, "-", direction))
+      next
+    }
     
-    # Save the expanded descriptive spreadsheet out to your computer
-    write.csv(go_df, file = paste0("Dbl_vs_WT_GO_Enrichment_", direction, "_AllTerms.csv"), row.names = FALSE)
+    raw_hits <- go_df[go_df$pvalue < 0.05, ]
+    print(paste("Successfully recorded", nrow(raw_hits), "trending terms matching filter criteria."))
     
-    # Slice top 15 ranking indices for display
-    top_hits <- head(go_df[order(go_df$pvalue), ], 15)
-    
-    # Native fraction splitter logic to compute clean decimal ratios
-    top_hits$GeneRatio_num <- sapply(top_hits$GeneRatio, function(ratio_str) {
-      parts <- as.numeric(unlist(strsplit(ratio_str, "/")))
-      return(parts[1] / parts[2])
-    })
-    
-    # Re-order the display factor using the human-readable text labels
-    top_hits$Final_Plot_Label <- factor(top_hits$Final_Plot_Label, levels = rev(top_hits$Final_Plot_Label))
-    
-    # Widen image canvas layout to 1600px to fully support long pathway strings safely
-    png(filename = paste0("Dbl_vs_WT_GO_Enrichment_", direction, "_Dotplot.png"), width = 1600, height = 800, res = 150)
-    
-    p_custom_go <- ggplot(top_hits, aes(x = GeneRatio_num, y = Final_Plot_Label)) +
-      geom_point(aes(size = Count, color = pvalue)) +
-      scale_color_gradient(low = "firebrick2", high = "royalblue3") +
-      labs(title = paste("Top GO Terms:", direction, "Genes"),
-           subtitle = "Dbl Mutant vs WT (Ontology Dictionary Mapping Checked)",
-           x = "Gene Ratio (Enriched Genes / Total List)", y = "Enriched Biological Pathway Functions",
-           size = "Gene Count", color = "Raw P-Value") +
-      theme_bw() +
-      theme(
-        axis.text.y = element_text(size = 9, color = "black", face = "bold"),
-        axis.title.x = element_text(size = 11, face = "bold"),
-        axis.title.y = element_text(size = 11, face = "bold")
-      )
-    
-    print(p_custom_go)
-    dev.off()
-    print(paste("Plots generated successfully with named pathways for:", direction))
+    if (nrow(raw_hits) > 0) {
+      
+      # Query GO.db dictionary to map accession codes straight to true text pathways
+      pathway_terms <- mget(go_df$ID, GOTERM, ifnotfound = NA)
+      pathway_names <- sapply(pathway_terms, function(x) {
+        if (is.na(x)) return(NA)
+        return(Term(x))
+      })
+      
+      # Overlay translated strings or provide fallback layouts
+      go_df$Pathway_Description <- pathway_names
+      go_df$Pathway_Description <- ifelse(!is.na(go_df$Pathway_Description) & go_df$Pathway_Description != "", 
+                                          go_df$Pathway_Description, go_df$ID)
+      
+      # Construct structured hybrid axis label configuration
+      go_df$Final_Plot_Label <- paste0(go_df$Pathway_Description, " (", go_df$ID, ")")
+      
+      # Save individual data spreadsheet files out to disk folder
+      output_csv_name <- paste0(mutant_name, "_GO_Enrichment_", direction, "_AllTerms.csv")
+      write.csv(go_df, file = output_csv_name, row.names = FALSE)
+      
+      # Slice top 15 highest ranking rows to stage plotting variables
+      top_hits <- head(go_df[order(go_df$pvalue), ], 15)
+      
+      # FIXED MATH SPLITTER: Safely divides index 1 by index 2 to create a single numeric decimal value per row
+      top_hits$GeneRatio_num <- sapply(top_hits$GeneRatio, function(ratio_str) {
+        parts <- as.numeric(unlist(strsplit(ratio_str, "/")))
+        return(parts[1] / parts[2])
+      })
+      
+      # Re-order the display factor using the human-readable text labels
+      top_hits$Final_Plot_Label <- factor(top_hits$Final_Plot_Label, levels = rev(top_hits$Final_Plot_Label))
+      
+      # Export expanded canvas graphical frames safely to file directory
+      output_png_name <- paste0(mutant_name, "_GO_Enrichment_", direction, "_Dotplot.png")
+      png(filename = output_png_name, width = 1600, height = 800, res = 150)
+      
+      p_custom_go <- ggplot(top_hits, aes(x = GeneRatio_num, y = Final_Plot_Label)) +
+        geom_point(aes(size = Count, color = pvalue)) +
+        scale_color_gradient(low = "firebrick2", high = "royalblue3") +
+        labs(title = paste("Top GO Terms:", mutant_name, "-", direction),
+             subtitle = "Calculations derived against custom Candida Genome Database references",
+             x = "Gene Ratio (Enriched Genes / Total List)", y = "Enriched Biological Pathways",
+             size = "Gene Count", color = "Raw P-Value") +
+        theme_bw() +
+        theme(
+          axis.text.y = element_text(size = 9, color = "black", face = "bold"),
+          axis.title.x = element_text(size = 11, face = "bold"),
+          axis.title.y = element_text(size = 11, face = "bold"),
+          plot.title = element_text(size = 13, face = "bold")
+        )
+      
+      print(p_custom_go)
+      dev.off()
+      print(paste("Graphics successfully exported out to destination path:", output_png_name))
+    }
   }
 }
-print("PROCESSING COMPLETE! Named pathways have been written to the chart axes.")
+print("ALL MULTI-MUTANT GO ANALYSIS CALCULATIONS EXECUTED CLEANLY!")
 ```
 
