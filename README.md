@@ -454,3 +454,224 @@ $ pheatmap(heatmap_matrix,
 $ dev.off()
 $ print("SUCCESS: Consolidated multi-mutant heatmap and expanded volcano charts exported successfully!")
 ```
+
+### Refining Visualizations
+Excluded non-coding RNAs and assigns real gene names.
+```bash
+library(DESeq2)
+library(EnhancedVolcano)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+
+# ============================================================
+# 1. LOAD CGD DATABASE & IDENTIFY tRNA / rRNA FEATURE TYPES
+# ============================================================
+print("Parsing Candida Genome Database feature entries...")
+cgd_raw <- read.table("cgd_features.tab", header = FALSE, sep = "\t",
+                      quote = "", comment.char = "!")
+
+# Map columns out cleanly based on CGD structural indexing
+# Column 1: Systematic ID, Column 2: Gene Name, Column 4: Feature Type (e.g. tRNA, rRNA, ORF)
+mapping_table <- data.frame(
+  systematic_id = trimws(as.character(cgd_raw[, 1])),
+  gene_symbol   = trimws(as.character(cgd_raw[, 2])),
+  feature_type  = trimws(as.character(cgd_raw[, 4])),
+  stringsAsFactors = FALSE
+)
+
+# Convert empty symbol fields back to clean missing NA formats
+mapping_table$gene_symbol[mapping_table$gene_symbol == "" |
+                            mapping_table$gene_symbol == mapping_table$systematic_id] <- NA
+
+# Normalize matching strings by dropping hyphens and underscores
+normalize_id <- function(x) {
+  toupper(gsub("[_\\-]", "", trimws(x)))
+}
+mapping_table$id_norm <- normalize_id(mapping_table$systematic_id)
+
+# Deduplicate the mapping table to preserve precise 1-to-1 lookups
+mapping_table <- mapping_table[order(is.na(mapping_table$gene_symbol)), ]
+mapping_table <- mapping_table[!duplicated(mapping_table$id_norm), ]
+
+
+# ============================================================
+# 2. LOAD DATA MATRIX & PURGE NON-CODING HIT TYPES upfront
+# ============================================================
+print("Reading local data matrix...")
+counts_raw <- read.table("candida_counts_matrix.txt", header = TRUE, comment.char = "#", check.names = FALSE)
+
+# Extract Geneid (column 1) and your 8 raw count columns (columns 7 through 14)
+counts_clean <- counts_raw[, c(1, 7:14)]
+
+# Collapse duplicate gene names if present in the alignment output
+counts_fixed <- aggregate(. ~ Geneid, data = counts_clean, FUN = sum)
+
+# --- ADVANCED BIOLOGICAL FILTER ---
+# Normalize matrix keys to match CGD database entries
+stripped_keys <- gsub("^CAALFM_", "", counts_fixed$Geneid)
+normalized_matrix_keys <- normalize_id(stripped_keys)
+
+# Map feature types directly using vector matches
+matched_features <- mapping_table$feature_type[match(normalized_matrix_keys, mapping_table$id_norm)]
+
+# Explicitly identify rows flagged as tRNA or rRNA inside either the key text OR the CGD metadata feature type
+is_trna_or_rrna <- grepl("tRNA|rRNA", counts_fixed$Geneid, ignore.case = TRUE) | 
+  grepl("tRNA|rRNA", matched_features, ignore.case = TRUE)
+
+print(paste("Total transcripts before biological non-coding filtering:", nrow(counts_fixed)))
+counts_fixed <- counts_fixed[!is_trna_or_rrna, ]
+print(paste("Total transcripts remaining after absolute tRNA/rRNA exclusion:", nrow(counts_fixed)))
+# ----------------------------------
+
+rownames(counts_fixed) <- counts_fixed$Geneid
+counts <- counts_fixed[, -1]
+
+
+# ============================================================
+# 3. MANUALLY SET UP TARGET METADATA STRUCTURE
+# ============================================================
+bam_names <- colnames(counts)
+strains_vector <- c("WT", "WT", "kcs1", "kcs1", "vip1", "vip1", "dbl", "dbl")
+
+metadata <- data.frame(
+  Sample_ID = bam_names,
+  Strain = factor(strains_vector),
+  row.names = bam_names
+)
+metadata$Strain <- relevel(metadata$Strain, ref = "WT")
+
+print("--- RECONFIGURED METADATA DESIGN PROJECTIONS ---")
+print(metadata)
+
+
+# ============================================================
+# 4. EXECUTE UPSTREAM DESeq2 STATISTICAL PIPELINE
+# ============================================================
+print("Building the DESeq2 data object...")
+dds <- DESeqDataSetFromMatrix(countData = counts, colData = metadata, design = ~ Strain)
+
+# Drop any globally dead passenger genes with lower than 10 global reads across all libraries
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+
+# Process differential expression parameters
+dds <- DESeq(dds)
+
+print("--- COMPLETED DESEQ2 CONTRAST COEFFICIENTS ---")
+print(resultsNames(dds))
+
+# Save individual calculation files straight out to CSV tables
+res_dbl  <- results(dds, name = "Strain_dbl_vs_WT")
+res_kcs1 <- results(dds, name = "Strain_kcs1_vs_WT")
+res_vip1 <- results(dds, name = "Strain_vip1_vs_WT")
+
+write.csv(as.data.frame(res_dbl[order(res_dbl$padj), ]), file = "Dbl_vs_WT_Differential_Expression.csv")
+write.csv(as.data.frame(res_kcs1[order(res_kcs1$padj), ]), file = "Kcs1_vs_WT_Differential_Expression.csv")
+write.csv(as.data.frame(res_vip1[order(res_vip1$padj), ]), file = "Vip1_vs_WT_Differential_Expression.csv")
+
+
+# ============================================================
+# 5. GENERATE CLEAN DISPLAY NAME MAPS FOR THE PLOTS
+# ============================================================
+add_gene_names <- function(df, id_col = "raw_id") {
+  stripped <- gsub("^CAALFM_", "", df[[id_col]])
+  df$id_norm <- normalize_id(stripped)
+  df$gene_symbol <- mapping_table$gene_symbol[match(df$id_norm, mapping_table$id_norm)]
+  short_code <- gsub("CA$", "", stripped)
+  df$display_name <- ifelse(!is.na(df$gene_symbol), df$gene_symbol, short_code)
+  df
+}
+
+
+# ============================================================
+# 6. EXPORT OPTIMIZED SCALED VOLCANO PLOTS
+# ============================================================
+print("Generating updated Volcano Plots...")
+volcano_targets <- list("Dbl_vs_WT" = res_dbl, "Kcs1_vs_WT" = res_kcs1, "Vip1_vs_WT" = res_vip1)
+
+for (comp_name in names(volcano_targets)) {
+  res_df <- as.data.frame(volcano_targets[[comp_name]])
+  res_df$raw_id <- rownames(res_df)
+  res_df <- add_gene_names(res_df, "raw_id")
+  
+  # Map labels to NA explicitly so EnhancedVolcano doesn't draw blank overlaps
+  res_df$final_label <- ifelse(!is.na(res_df$padj) & res_df$padj < 0.05 & abs(res_df$log2FoldChange) >= 1.0, 
+                               res_df$display_name, NA)
+  
+  png(filename = paste0("Volcano_Plot_", comp_name, ".png"), width = 1200, height = 1000, res = 150)
+  
+  p_vol <- EnhancedVolcano(res_df,
+                           lab = res_df$final_label,
+                           x = 'log2FoldChange', y = 'padj',
+                           pCutoff = 0.05, FCcutoff = 1.0,
+                           pointSize = 1.2, labSize = 3.0,
+                           col = c('grey50', 'forestgreen', 'royalblue3', 'firebrick2'),
+                           title = paste("Comparison:", comp_name),
+                           subtitle = "Labelled keys reflect padj < 0.05 and |Log2FC| >= 1.0 (Non-coding Excluded)",
+                           legendPosition = 'bottom',
+                           drawConnectors = TRUE, widthConnectors = 0.3,
+                           max.overlaps = 80)
+  
+  p_vol <- p_vol + theme(
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    axis.text.x = element_text(size = 14, color = "black"),
+    axis.text.y = element_text(size = 14, color = "black"),
+    title = element_text(size = 16, face = "bold")
+  )
+  
+  print(p_vol)
+  dev.off()
+}
+
+
+# ============================================================
+# 7. UNIFIED VARIANCE-SORTED LOG2FC HEATMAP
+# ============================================================
+print("Compiling a single comparative Log2 Fold Change Heatmap...")
+
+fc_matrix_df <- data.frame(
+  raw_id      = rownames(res_dbl),
+  Dbl_Log2FC  = res_dbl$log2FoldChange,
+  Kcs1_Log2FC = res_kcs1$log2FoldChange,
+  Vip1_Log2FC = res_vip1$log2FoldChange
+)
+
+fc_master <- add_gene_names(fc_matrix_df, "raw_id")
+
+# Drop any lines carrying empty missing coordinates
+fc_master_clean <- fc_master[!is.na(fc_master$Dbl_Log2FC) & 
+                               !is.na(fc_master$Kcs1_Log2FC) & 
+                               !is.na(fc_master$Vip1_Log2FC), ]
+
+# Compute biological variance across conditions to reveal true expression shifts
+gene_variances <- apply(fc_master_clean[, c("Dbl_Log2FC", "Kcs1_Log2FC", "Vip1_Log2FC")], 1, var)
+fc_master_clean$variance <- gene_variances
+
+top50_genes <- head(fc_master_clean[order(-fc_master_clean$variance), ], 50)
+
+heatmap_matrix <- as.matrix(top50_genes[, c("Dbl_Log2FC", "Kcs1_Log2FC", "Vip1_Log2FC")])
+rownames(heatmap_matrix) <- top50_genes$display_name
+colnames(heatmap_matrix) <- c("Dbl Mutant vs WT", "Kcs1 Mutant vs WT", "Vip1 Mutant vs WT")
+
+# Balance colors precisely around zero 
+max_val <- max(abs(heatmap_matrix), na.rm = TRUE)
+color_breaks <- seq(-max_val, max_val, length.out = 101)
+
+png(filename = "Unified_Mutants_vs_WT_Log2FC_Heatmap.png", width = 1100, height = 1200, res = 150)
+
+pheatmap(heatmap_matrix,
+         scale = "none",
+         cluster_cols = TRUE,
+         cluster_rows = TRUE,
+         color = colorRampPalette(c("royalblue3", "white", "firebrick2"))(100),
+         breaks = color_breaks,
+         fontsize_row = 9,
+         fontsize_col = 11,
+         border_color = "grey95",
+         main = "Comparative Fold Changes of Top 50 Most Variable Genes (Non-coding Excluded)")
+
+dev.off()
+print("SUCCESS: Full pipeline executed. Non-coding RNAs are cleared and verified images are written out!")
+```
