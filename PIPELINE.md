@@ -134,7 +134,7 @@ Once window is open, paste in slurm script. Run slurm array job to align all 8 s
 
 # Establish directory paths
 $ BASE_DIR="/home/yc1201/rnaseq_ypd1"
-$ RAW_DIR="${BASE_DIR}/rnaseq_ypd1/raw"
+$ RAW_DIR="${BASE_DIR}/raw"
 $ INDEX_DIR="${BASE_DIR}/reference/star_index"
 $ OUT_DIR="${BASE_DIR}/results/aligned"
 
